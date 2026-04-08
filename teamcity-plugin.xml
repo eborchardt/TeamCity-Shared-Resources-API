@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<teamcity-plugin xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                 xsi:noNamespaceSchemaLocation="urn:schemas-jetbrains-com:teamcity-plugin">
+    <info>
+        <name>shared-resources-api</name>
+        <display-name>Shared Resources API</display-name>
+        <version>1.0.0</version>
+        <description>Atomic REST API for managing TeamCity shared resource pools</description>
+        <vendor>
+            <name>Playground Games</name>
+        </vendor>
+    </info>
+    <deployment use-separate-classloader="true"/>
+</teamcity-plugin>
