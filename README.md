@@ -240,6 +240,38 @@ After installation, a **Shared Resources API** tab appears under **Administratio
 
 ---
 
+## Testing Error Handling
+
+`lock-file.py` is included in this repository to simulate the Versioned Settings race condition locally. It holds an exclusive OS-level lock on a file until you press Enter, blocking any process — including TeamCity — from writing to it.
+
+**Usage:**
+
+```bash
+python lock-file.py <path-to-file>
+```
+
+**To reproduce the 500 / persist-failure path:**
+
+1. Find the project config file on the TeamCity server, e.g.:
+   ```
+   C:\ProgramData\JetBrains\TeamCity\config\projects\<ProjectId>\project-config.xml
+   ```
+2. Lock it in one terminal:
+   ```bash
+   python lock-file.py "C:\ProgramData\JetBrains\TeamCity\config\projects\SharedResources\project-config.xml"
+   ```
+3. In another terminal, send a PUT request. The plugin will attempt to call `persist()`, fail, and return a 500 with a `Retry-After` header.
+4. Press Enter in the first terminal to release the lock. The next PUT will succeed.
+
+**Expected behaviour while locked:**
+
+- **GET** returns 200 — reads come from TeamCity's in-memory model, not the file.
+- **PUT** returns 500 with `Retry-After: 10` (or whatever is configured in Admin Settings).
+
+> **Note:** Locking the file externally leaves TeamCity's in-memory model and on-disk state temporarily out of sync — any `updateFeature()` calls already applied in memory will be lost on server restart if `persist()` never succeeds. This matches the real Versioned Settings failure mode. Always release the lock before restarting.
+
+---
+
 ## Building from Source
 
 **Prerequisites:** JDK 11+, Maven 3.6+
