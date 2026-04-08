@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.playgroundgames.teamcity</groupId>
+    <groupId>com.example.teamcity</groupId>
     <artifactId>shared-resources-api</artifactId>
     <version>1.0.0</version>
     <packaging>pom</packaging>
@@ -14,7 +14,7 @@
     </modules>
 
     <properties>
-        <teamcity.version>2024.12.2</teamcity.version>
+        <teamcity.version>2024.12</teamcity.version>
         <java.version>11</java.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
@@ -28,28 +28,4 @@
         </repository>
     </repositories>
 
-    <build>
-        <plugins>
-            <!-- Assembles the final .zip plugin package -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-assembly-plugin</artifactId>
-                <version>3.6.0</version>
-                <configuration>
-                    <descriptors>
-                        <descriptor>assembly.xml</descriptor>
-                    </descriptors>
-                    <appendAssemblyId>false</appendAssemblyId>
-                    <finalName>shared-resources-api</finalName>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>make-assembly</id>
-                        <phase>package</phase>
-                        <goals><goal>single</goal></goals>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
 </project>

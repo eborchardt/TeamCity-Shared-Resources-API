@@ -1,0 +1,9 @@
+com\example\teamcity\sharedresources\BatchUpdateRequest$ResourceUpdate.class
+com\example\teamcity\sharedresources\SharedResourcesSettings.class
+com\example\teamcity\sharedresources\SharedResourcesApiController$BadRequestException.class
+com\example\teamcity\sharedresources\SharedResourcesAdminController$SettingsTab.class
+com\example\teamcity\sharedresources\SharedResourcesApiController.class
+com\example\teamcity\sharedresources\BatchUpdateRequest.class
+com\example\teamcity\sharedresources\SharedResourcesAdminController.class
+com\example\teamcity\sharedresources\SharedResourcesApiController$ResourceNotFoundException.class
+com\example\teamcity\sharedresources\SharedResourcesApiController$PersistException.class

@@ -1,4 +1,4 @@
-package com.playgroundgames.teamcity.sharedresources;
+package com.example.teamcity.sharedresources;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.List;

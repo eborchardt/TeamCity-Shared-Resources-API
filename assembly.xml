@@ -5,31 +5,24 @@
     <formats><format>zip</format></formats>
     <includeBaseDirectory>false</includeBaseDirectory>
 
+    <!-- teamcity-plugin.xml goes in the zip root -->
     <files>
         <file>
-            <source>teamcity-plugin.xml</source>
+            <source>../teamcity-plugin.xml</source>
             <outputDirectory>/</outputDirectory>
         </file>
     </files>
 
-    <moduleSets>
-        <moduleSet>
-            <useAllReactorProjects>true</useAllReactorProjects>
-            <binaries>
-                <outputDirectory>server</outputDirectory>
-                <unpack>false</unpack>
-                <dependencySets>
-                    <dependencySet>
-                        <!-- only bundle dependencies NOT provided by TC itself -->
-                        <excludes>
-                            <exclude>org.jetbrains.teamcity:*</exclude>
-                            <exclude>javax.servlet:*</exclude>
-                            <exclude>org.springframework:*</exclude>
-                        </excludes>
-                        <outputDirectory>server</outputDirectory>
-                    </dependencySet>
-                </dependencySets>
-            </binaries>
-        </moduleSet>
-    </moduleSets>
+    <!-- server/ directory: the plugin jar + bundled (non-TC) dependencies -->
+    <dependencySets>
+        <dependencySet>
+            <outputDirectory>server</outputDirectory>
+            <useProjectArtifact>true</useProjectArtifact>
+            <excludes>
+                <exclude>org.jetbrains.teamcity:*</exclude>
+                <exclude>javax.servlet:*</exclude>
+                <exclude>org.springframework:*</exclude>
+            </excludes>
+        </dependencySet>
+    </dependencySets>
 </assembly>

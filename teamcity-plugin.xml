@@ -5,10 +5,11 @@
         <name>shared-resources-api</name>
         <display-name>Shared Resources API</display-name>
         <version>1.0.0</version>
+        <min-build>174504</min-build>
         <description>Atomic REST API for managing TeamCity shared resource pools</description>
         <vendor>
-            <name>Playground Games</name>
+            <name>JetBrains Customer</name>
         </vendor>
     </info>
-    <deployment use-separate-classloader="true"/>
+    <deployment use-separate-classloader="false"/>
 </teamcity-plugin>

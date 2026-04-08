@@ -1,4 +1,4 @@
-package com.playgroundgames.teamcity.sharedresources;
+package com.example.teamcity.sharedresources;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jetbrains.buildServer.controllers.BaseController;
@@ -8,6 +8,8 @@ import jetbrains.buildServer.serverSide.SProjectFeatureDescriptor;
 import jetbrains.buildServer.users.User;
 import jetbrains.buildServer.web.openapi.WebControllerManager;
 import org.jetbrains.annotations.NotNull;
+import org.springframework.beans.BeansException;
+import org.springframework.context.ApplicationContext;
 import org.springframework.web.servlet.ModelAndView;
 
 import javax.servlet.http.HttpServletRequest;
@@ -43,6 +45,7 @@ public class SharedResourcesApiController extends BaseController {
     static final String PARAM_VALUES = "values";
 
     private final ProjectManager projectManager;
+    private final SharedResourcesSettings settings;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
@@ -52,9 +55,29 @@ public class SharedResourcesApiController extends BaseController {
      */
     private final ReentrantLock writeLock = new ReentrantLock();
 
-    public SharedResourcesApiController(@NotNull WebControllerManager webManager,
-                                        @NotNull ProjectManager projectManager) {
+    public SharedResourcesApiController(@NotNull ProjectManager projectManager,
+                                        @NotNull SharedResourcesSettings settings) {
         this.projectManager = projectManager;
+        this.settings = settings;
+        setSupportedMethods("GET", "PUT");
+    }
+
+    /**
+     * Called by Spring after setApplicationContext — the correct override point in
+     * ApplicationObjectSupport (BaseController's ancestor). Looks up WebControllerManager
+     * by type to avoid any dependency on its registered bean name.
+     */
+    @Override
+    protected void initApplicationContext() throws BeansException {
+        super.initApplicationContext();
+        ApplicationContext ctx = getApplicationContext();
+        WebControllerManager webManager;
+        try {
+            webManager = ctx.getBean(WebControllerManager.class);
+        } catch (Exception e) {
+            // Fall back to TC's parent context when running with a separate classloader
+            webManager = ctx.getParent().getBean(WebControllerManager.class);
+        }
         webManager.registerController("/app/sharedResourcesApi/**", this);
     }
 
@@ -63,8 +86,7 @@ public class SharedResourcesApiController extends BaseController {
                                     @NotNull HttpServletResponse response) throws Exception {
         response.setContentType("application/json;charset=UTF-8");
 
-        // Resolve authenticated user (TC populates this via its standard auth filters).
-        User currentUser = jetbrains.buildServer.users.impl.SessionUserImpl.getUser(request);
+        User currentUser = getAuthenticatedUser(request);
         if (currentUser == null) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             writeJson(response, error("Authentication required"));
@@ -153,9 +175,9 @@ public class SharedResourcesApiController extends BaseController {
         }
 
         // Acquire the write lock (30-second timeout to avoid indefinite blocking).
-        if (!writeLock.tryLock(30, TimeUnit.SECONDS)) {
+        if (!tryAcquireWriteLock()) {
             response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
-            response.setHeader("Retry-After", "5");
+            response.setHeader("Retry-After", String.valueOf(settings.getRetryAfterLockSeconds()));
             writeJson(response, error("Server is busy processing another shared resource update. Retry in a few seconds."));
             return;
         }
@@ -174,7 +196,7 @@ public class SharedResourcesApiController extends BaseController {
             writeJson(response, error(e.getMessage()));
         } catch (PersistException e) {
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            response.setHeader("Retry-After", "10");
+            response.setHeader("Retry-After", String.valueOf(settings.getRetryAfterPersistSeconds()));
             writeJson(response, error("TeamCity could not persist the config change. " +
                     "This may be a transient conflict with an internal write (e.g. Kotlin DSL sync). " +
                     "Retry in a few seconds. Detail: " + e.getMessage()));
@@ -309,6 +331,16 @@ public class SharedResourcesApiController extends BaseController {
 
     private void writeJson(HttpServletResponse response, Object value) throws Exception {
         objectMapper.writeValue(response.getOutputStream(), value);
+    }
+
+    /** Overridable for testing — simulates lock contention without real threads. */
+    protected boolean tryAcquireWriteLock() throws InterruptedException {
+        return writeLock.tryLock(settings.getLockTimeoutSeconds(), TimeUnit.SECONDS);
+    }
+
+    /** Overridable for testing — avoids a static dependency on SessionUser. */
+    protected User getAuthenticatedUser(HttpServletRequest request) {
+        return jetbrains.buildServer.web.util.SessionUser.getUser(request);
     }
 
     private Map<String, String> error(String message) {
