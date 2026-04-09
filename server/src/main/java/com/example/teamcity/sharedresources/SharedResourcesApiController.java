@@ -250,15 +250,26 @@ public class SharedResourcesApiController extends BaseController {
             applied.add(u.getName());
         }
 
-        // Single persist call for all changes — this is the key improvement over
-        // individual REST calls, each of which would trigger a separate file write.
-        try {
-            project.persist();
-        } catch (Exception e) {
-            throw new PersistException(e.getMessage());
+        // Single persist call for all changes — retried on failure to handle transient
+        // lock contention (e.g. a Versioned Settings sync releasing the file shortly after).
+        int attempts = settings.getPersistMaxAttempts();
+        long delayMs  = settings.getPersistRetryDelayMs();
+        Exception lastFailure = null;
+        for (int i = 1; i <= attempts; i++) {
+            try {
+                project.persist();
+                return applied;
+            } catch (Exception e) {
+                lastFailure = e;
+                if (i < attempts) {
+                    try { Thread.sleep(delayMs); } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new PersistException(e.getMessage());
+                    }
+                }
+            }
         }
-
-        return applied;
+        throw new PersistException(lastFailure.getMessage());
     }
 
     private void applyValueChanges(Map<String, String> params,

@@ -15,13 +15,17 @@ public class SharedResourcesSettings {
 
     private static final Logger LOG = Logger.getLogger(SharedResourcesSettings.class);
 
-    static final String KEY_LOCK_TIMEOUT    = "lockTimeoutSeconds";
-    static final String KEY_RETRY_LOCK      = "retryAfterLockSeconds";
-    static final String KEY_RETRY_PERSIST   = "retryAfterPersistSeconds";
+    static final String KEY_LOCK_TIMEOUT       = "lockTimeoutSeconds";
+    static final String KEY_RETRY_LOCK         = "retryAfterLockSeconds";
+    static final String KEY_RETRY_PERSIST      = "retryAfterPersistSeconds";
+    static final String KEY_PERSIST_ATTEMPTS   = "persistMaxAttempts";
+    static final String KEY_PERSIST_DELAY_MS   = "persistRetryDelayMs";
 
-    static final int DEFAULT_LOCK_TIMEOUT   = 30;
-    static final int DEFAULT_RETRY_LOCK     = 5;
-    static final int DEFAULT_RETRY_PERSIST  = 10;
+    static final int DEFAULT_LOCK_TIMEOUT      = 30;
+    static final int DEFAULT_RETRY_LOCK        = 5;
+    static final int DEFAULT_RETRY_PERSIST     = 10;
+    static final int DEFAULT_PERSIST_ATTEMPTS  = 3;
+    static final int DEFAULT_PERSIST_DELAY_MS  = 2000;
 
     private final File settingsFile;
     private final Properties props = new Properties();
@@ -44,12 +48,24 @@ public class SharedResourcesSettings {
         return getInt(KEY_RETRY_PERSIST, DEFAULT_RETRY_PERSIST);
     }
 
+    public int getPersistMaxAttempts() {
+        return getInt(KEY_PERSIST_ATTEMPTS, DEFAULT_PERSIST_ATTEMPTS);
+    }
+
+    public int getPersistRetryDelayMs() {
+        return getInt(KEY_PERSIST_DELAY_MS, DEFAULT_PERSIST_DELAY_MS);
+    }
+
     public synchronized void update(int lockTimeoutSeconds,
                                     int retryAfterLockSeconds,
-                                    int retryAfterPersistSeconds) {
-        props.setProperty(KEY_LOCK_TIMEOUT,  String.valueOf(lockTimeoutSeconds));
-        props.setProperty(KEY_RETRY_LOCK,    String.valueOf(retryAfterLockSeconds));
-        props.setProperty(KEY_RETRY_PERSIST, String.valueOf(retryAfterPersistSeconds));
+                                    int retryAfterPersistSeconds,
+                                    int persistMaxAttempts,
+                                    int persistRetryDelayMs) {
+        props.setProperty(KEY_LOCK_TIMEOUT,     String.valueOf(lockTimeoutSeconds));
+        props.setProperty(KEY_RETRY_LOCK,       String.valueOf(retryAfterLockSeconds));
+        props.setProperty(KEY_RETRY_PERSIST,    String.valueOf(retryAfterPersistSeconds));
+        props.setProperty(KEY_PERSIST_ATTEMPTS, String.valueOf(persistMaxAttempts));
+        props.setProperty(KEY_PERSIST_DELAY_MS, String.valueOf(persistRetryDelayMs));
         save();
     }
 

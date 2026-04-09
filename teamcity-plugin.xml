@@ -11,5 +11,5 @@
             <name>JetBrains Customer</name>
         </vendor>
     </info>
-    <deployment use-separate-classloader="false"/>
+    <deployment use-separate-classloader="true" allow-runtime-reload="true"/>
 </teamcity-plugin>

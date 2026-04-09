@@ -7,6 +7,7 @@
   <p>Controls how the plugin handles concurrent write requests to shared resource pools.</p>
 
   <form method="post" action="${pageContext.request.contextPath}/admin/sharedResourcesApi.html">
+    <input type="hidden" name="tc-csrf-token" value="${sessionScope['tc-csrf-token']}"/>
     <table class="runnerFormTable">
       <tr>
         <th><label for="lockTimeoutSeconds">Lock acquisition timeout</label></th>
@@ -30,6 +31,22 @@
           <input type="number" id="retryAfterPersistSeconds" name="retryAfterPersistSeconds"
                  value="${settings.retryAfterPersistSeconds}" min="1" max="60" style="width:70px"/>
           <span class="smallNote">seconds — sent in the <code>Retry-After</code> header with a 500. Default: 10.</span>
+        </td>
+      </tr>
+      <tr>
+        <th><label for="persistMaxAttempts">Persist retry attempts</label></th>
+        <td>
+          <input type="number" id="persistMaxAttempts" name="persistMaxAttempts"
+                 value="${settings.persistMaxAttempts}" min="1" max="10" style="width:70px"/>
+          <span class="smallNote">How many times to retry <code>persist()</code> before giving up and returning 500. Default: 3.</span>
+        </td>
+      </tr>
+      <tr>
+        <th><label for="persistRetryDelayMs">Persist retry delay (ms)</label></th>
+        <td>
+          <input type="number" id="persistRetryDelayMs" name="persistRetryDelayMs"
+                 value="${settings.persistRetryDelayMs}" min="100" max="30000" style="width:70px"/>
+          <span class="smallNote">How long to wait between persist attempts. Default: 2000.</span>
         </td>
       </tr>
     </table>

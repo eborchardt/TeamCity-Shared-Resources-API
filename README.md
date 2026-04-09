@@ -155,7 +155,7 @@ All errors return JSON with an `error` field:
 | 401  | No authenticated user                                               |
 | 403  | User lacks EDIT_PROJECT permission                                  |
 | 404  | Project or named resource not found                                 |
-| 500  | TeamCity could not persist the change (see `Retry-After` header)   |
+| 500  | TeamCity could not persist after all retry attempts (see `Retry-After` header) |
 | 503  | Server busy — another update is in progress (see `Retry-After` header) |
 
 On 500 and 503 responses, a `Retry-After` header indicates how many seconds to wait before retrying.
@@ -232,11 +232,13 @@ done
 
 After installation, a **Shared Resources API** tab appears under **Administration → Server Administration**. Three settings control retry behaviour:
 
-| Setting                         | Default | Description                                                  |
-|---------------------------------|---------|--------------------------------------------------------------|
-| Lock acquisition timeout (s)    | 30      | How long a PUT waits for the write lock before returning 503 |
-| Retry-After for lock contention | 5       | Value of the `Retry-After` header on a 503 response          |
-| Retry-After for persist failure | 10      | Value of the `Retry-After` header on a 500 response          |
+| Setting                         | Default | Description                                                                     |
+|---------------------------------|---------|---------------------------------------------------------------------------------|
+| Lock acquisition timeout (s)    | 30      | How long a PUT waits for the write lock before returning 503                    |
+| Retry-After for lock contention | 5       | Value of the `Retry-After` header on a 503 response                             |
+| Persist retry attempts          | 3       | How many times to retry `persist()` internally before giving up and returning 500 |
+| Persist retry delay (ms)        | 2000    | Delay between persist attempts                                                  |
+| Retry-After for persist failure | 10      | Value of the `Retry-After` header on a 500 (all retries exhausted)              |
 
 ---
 
@@ -269,6 +271,8 @@ python lock-file.py <path-to-file>
 - **PUT** returns 500 with `Retry-After: 10` (or whatever is configured in Admin Settings).
 
 > **Note:** Locking the file externally leaves TeamCity's in-memory model and on-disk state temporarily out of sync — any `updateFeature()` calls already applied in memory will be lost on server restart if `persist()` never succeeds. This matches the real Versioned Settings failure mode. Always release the lock before restarting.
+>
+> You may also find a `project-config.xml.new` file left in the project directory after the test. TeamCity writes config changes to a `.new` temp file first and then renames it over the original. When the original is locked, the rename fails and the `.new` file is abandoned. It is safe to delete once the lock is released.
 
 ---
 

@@ -67,10 +67,12 @@ public class SharedResourcesAdminController extends BaseController {
     protected ModelAndView doHandle(@NotNull HttpServletRequest request,
                                     @NotNull HttpServletResponse response) throws Exception {
         if ("POST".equals(request.getMethod())) {
-            int lockTimeout  = parsePositive(request.getParameter("lockTimeoutSeconds"),  SharedResourcesSettings.DEFAULT_LOCK_TIMEOUT);
-            int retryLock    = parsePositive(request.getParameter("retryAfterLockSeconds"),    SharedResourcesSettings.DEFAULT_RETRY_LOCK);
-            int retryPersist = parsePositive(request.getParameter("retryAfterPersistSeconds"), SharedResourcesSettings.DEFAULT_RETRY_PERSIST);
-            settings.update(lockTimeout, retryLock, retryPersist);
+            int lockTimeout      = parsePositive(request.getParameter("lockTimeoutSeconds"),      SharedResourcesSettings.DEFAULT_LOCK_TIMEOUT);
+            int retryLock        = parsePositive(request.getParameter("retryAfterLockSeconds"),   SharedResourcesSettings.DEFAULT_RETRY_LOCK);
+            int retryPersist     = parsePositive(request.getParameter("retryAfterPersistSeconds"),SharedResourcesSettings.DEFAULT_RETRY_PERSIST);
+            int persistAttempts  = parsePositive(request.getParameter("persistMaxAttempts"),      SharedResourcesSettings.DEFAULT_PERSIST_ATTEMPTS);
+            int persistDelayMs   = parsePositive(request.getParameter("persistRetryDelayMs"),     SharedResourcesSettings.DEFAULT_PERSIST_DELAY_MS);
+            settings.update(lockTimeout, retryLock, retryPersist, persistAttempts, persistDelayMs);
         }
         response.sendRedirect(request.getContextPath() + "/admin/admin.html?item=sharedResourcesApi");
         return null;

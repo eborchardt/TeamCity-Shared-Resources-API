@@ -1,4 +1,4 @@
 -------------------------------------------------------------------------------
 Test set: com.example.teamcity.sharedresources.SharedResourcesApiControllerTest
 -------------------------------------------------------------------------------
-Tests run: 21, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.046 s -- in com.example.teamcity.sharedresources.SharedResourcesApiControllerTest
+Tests run: 21, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 6.196 s -- in com.example.teamcity.sharedresources.SharedResourcesApiControllerTest
