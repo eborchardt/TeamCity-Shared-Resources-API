@@ -13,15 +13,11 @@ import org.springframework.web.servlet.ModelAndView;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
-/**
- * Handles form POSTs from the admin settings page and registers the admin tab.
- *
- * The AdminPage tab is created inside initApplicationContext() so that PagePlaces
- * and PluginDescriptor can be looked up by type — avoiding any dependency on their
- * bean names (which differ across TC versions).
- */
+/** Handles the admin settings page. */
 public class SharedResourcesAdminController extends BaseController {
 
     private final SharedResourcesSettings settings;
@@ -36,7 +32,6 @@ public class SharedResourcesAdminController extends BaseController {
         super.initApplicationContext();
         ApplicationContext ctx = getApplicationContext();
 
-        // Register this controller for form POST
         WebControllerManager wcm;
         try {
             wcm = ctx.getBean(WebControllerManager.class);
@@ -45,7 +40,6 @@ public class SharedResourcesAdminController extends BaseController {
         }
         wcm.registerController("/admin/sharedResourcesApi.html", this);
 
-        // Look up what AdminPage needs by type rather than by bean name
         PagePlaces pagePlaces;
         try {
             pagePlaces = ctx.getBean(PagePlaces.class);
@@ -72,9 +66,16 @@ public class SharedResourcesAdminController extends BaseController {
             int retryPersist     = parsePositive(request.getParameter("retryAfterPersistSeconds"),SharedResourcesSettings.DEFAULT_RETRY_PERSIST);
             int persistAttempts  = parsePositive(request.getParameter("persistMaxAttempts"),      SharedResourcesSettings.DEFAULT_PERSIST_ATTEMPTS);
             int persistDelayMs   = parsePositive(request.getParameter("persistRetryDelayMs"),     SharedResourcesSettings.DEFAULT_PERSIST_DELAY_MS);
-            settings.update(lockTimeout, retryLock, retryPersist, persistAttempts, persistDelayMs);
+            try {
+                settings.update(lockTimeout, retryLock, retryPersist, persistAttempts, persistDelayMs);
+                response.sendRedirect(adminPageUrl(request));
+            } catch (SharedResourcesSettings.SettingsPersistenceException e) {
+                response.sendRedirect(adminPageUrl(request) + "&saveError="
+                        + URLEncoder.encode(e.getMessage(), StandardCharsets.UTF_8));
+            }
+            return null;
         }
-        response.sendRedirect(request.getContextPath() + "/admin/admin.html?item=sharedResourcesApi");
+        response.sendRedirect(adminPageUrl(request));
         return null;
     }
 
@@ -88,10 +89,9 @@ public class SharedResourcesAdminController extends BaseController {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Admin tab — created as a non-Spring object so we can supply PagePlaces
-    // and PluginDescriptor by type rather than by bean name.
-    // -------------------------------------------------------------------------
+    private static String adminPageUrl(HttpServletRequest request) {
+        return request.getContextPath() + "/admin/admin.html?item=sharedResourcesApi";
+    }
 
     private class SettingsTab extends AdminPage {
 
@@ -111,6 +111,7 @@ public class SharedResourcesAdminController extends BaseController {
         @Override
         public void fillModel(@NotNull Map<String, Object> model, @NotNull HttpServletRequest request) {
             model.put("settings", settings);
+            model.put("saveError", request.getParameter("saveError"));
         }
     }
 }

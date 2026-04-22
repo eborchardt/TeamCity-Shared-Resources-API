@@ -5,6 +5,9 @@
 <div class="editNotificatorSettingsPage">
   <h2 class="noBorder">Shared Resources API</h2>
   <p>Controls how the plugin handles concurrent write requests to shared resource pools.</p>
+  <c:if test="${not empty saveError}">
+    <div class="errorMessage">${saveError}</div>
+  </c:if>
 
   <form method="post" action="${pageContext.request.contextPath}/admin/sharedResourcesApi.html">
     <input type="hidden" name="tc-csrf-token" value="${sessionScope['tc-csrf-token']}"/>

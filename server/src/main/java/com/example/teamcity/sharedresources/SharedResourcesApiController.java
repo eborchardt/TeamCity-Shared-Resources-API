@@ -19,23 +19,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
-/**
- * Provides atomic REST endpoints for managing TeamCity shared resource pools.
- *
- * Endpoints (all under /app/sharedResourcesApi):
- *
- *   GET  /resources?projectId=_Root
- *        List all shared resources in a project.
- *
- *   PUT  /resources?projectId=_Root
- *        Atomically update one or more shared resources in a single write.
- *        Accepts a JSON body describing the changes (see BatchUpdateRequest).
- *
- * Authentication: standard TeamCity token auth — pass the same
- * "Authorization: Bearer <token>" header you use for /app/rest.
- *
- * Required permission: EDIT_PROJECT on the target project.
- */
+/** REST endpoints for reading and updating shared resources. */
 public class SharedResourcesApiController extends BaseController {
 
     static final String FEATURE_TYPE = "JetBrains.SharedResources";
@@ -48,11 +32,7 @@ public class SharedResourcesApiController extends BaseController {
     private final SharedResourcesSettings settings;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    /**
-     * One lock per server — prevents concurrent writes from racing each other.
-     * Does NOT protect against TC's own internal writes (e.g. Kotlin DSL sync),
-     * but the retry-on-conflict mechanism in handlePut() handles that case.
-     */
+    /** Serializes plugin-side PUT requests. */
     private final ReentrantLock writeLock = new ReentrantLock();
 
     public SharedResourcesApiController(@NotNull ProjectManager projectManager,
@@ -62,11 +42,6 @@ public class SharedResourcesApiController extends BaseController {
         setSupportedMethods("GET", "PUT");
     }
 
-    /**
-     * Called by Spring after setApplicationContext — the correct override point in
-     * ApplicationObjectSupport (BaseController's ancestor). Looks up WebControllerManager
-     * by type to avoid any dependency on its registered bean name.
-     */
     @Override
     protected void initApplicationContext() throws BeansException {
         super.initApplicationContext();
@@ -75,7 +50,7 @@ public class SharedResourcesApiController extends BaseController {
         try {
             webManager = ctx.getBean(WebControllerManager.class);
         } catch (Exception e) {
-            // Fall back to TC's parent context when running with a separate classloader
+            // Separate classloader deployments may need the parent context.
             webManager = ctx.getParent().getBean(WebControllerManager.class);
         }
         webManager.registerController("/app/sharedResourcesApi/**", this);
@@ -130,22 +105,6 @@ public class SharedResourcesApiController extends BaseController {
 
     // -------------------------------------------------------------------------
     // PUT /app/sharedResourcesApi/resources?projectId=<id>
-    //
-    // Request body:
-    // {
-    //   "resources": [
-    //     {
-    //       "name": "GPU-Pool",
-    //       "addValues": ["gpu-05"],        // for custom/values-type resources
-    //       "removeValues": ["gpu-01"],
-    //       "setValues": ["a","b","c"]      // replaces entire value list (cannot combine with add/remove)
-    //     },
-    //     {
-    //       "name": "License-Pool",
-    //       "quota": 8                      // for quoted-type resources
-    //     }
-    //   ]
-    // }
     // -------------------------------------------------------------------------
 
     private void handlePut(HttpServletRequest request, HttpServletResponse response,
@@ -174,7 +133,6 @@ public class SharedResourcesApiController extends BaseController {
             return;
         }
 
-        // Acquire the write lock (30-second timeout to avoid indefinite blocking).
         if (!tryAcquireWriteLock()) {
             response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
             response.setHeader("Retry-After", String.valueOf(settings.getRetryAfterLockSeconds()));
@@ -213,16 +171,19 @@ public class SharedResourcesApiController extends BaseController {
                                       List<BatchUpdateRequest.ResourceUpdate> updates)
             throws ResourceNotFoundException, BadRequestException, PersistException {
 
-        // Build a lookup of existing features by name (case-sensitive, per TC behaviour).
         Map<String, SProjectFeatureDescriptor> byName = new LinkedHashMap<>();
         for (SProjectFeatureDescriptor f : project.getOwnFeaturesOfType(FEATURE_TYPE)) {
             byName.put(f.getParameters().get(PARAM_NAME), f);
         }
+        Map<String, Map<String, String>> originalParamsByFeatureId = new LinkedHashMap<>();
+        Set<String> seenResourceNames = new HashSet<>();
 
-        // Validate all updates before touching anything.
         for (BatchUpdateRequest.ResourceUpdate u : updates) {
             if (u.getName() == null || u.getName().isBlank()) {
                 throw new BadRequestException("Each resource update must specify a 'name'");
+            }
+            if (!seenResourceNames.add(u.getName())) {
+                throw new BadRequestException("Duplicate resource update in request: '" + u.getName() + "'");
             }
             if (!byName.containsKey(u.getName())) {
                 throw new ResourceNotFoundException("Shared resource not found: '" + u.getName() +
@@ -231,13 +192,18 @@ public class SharedResourcesApiController extends BaseController {
             if (u.getSetValues() != null && (u.getAddValues() != null || u.getRemoveValues() != null)) {
                 throw new BadRequestException("Cannot combine 'setValues' with 'addValues'/'removeValues' for resource: " + u.getName());
             }
+
+            SProjectFeatureDescriptor feature = byName.get(u.getName());
+            String type = feature.getParameters().getOrDefault(PARAM_TYPE, "quoted");
+            validateUpdateFieldsForType(u, type);
         }
 
-        // Apply all changes to the in-memory model (no disk write yet).
         List<String> applied = new ArrayList<>();
         for (BatchUpdateRequest.ResourceUpdate u : updates) {
             SProjectFeatureDescriptor feature = byName.get(u.getName());
-            Map<String, String> params = new HashMap<>(feature.getParameters());
+            Map<String, String> originalParams = new HashMap<>(feature.getParameters());
+            originalParamsByFeatureId.put(feature.getId(), originalParams);
+            Map<String, String> params = new HashMap<>(originalParams);
             String type = params.getOrDefault(PARAM_TYPE, "quoted");
 
             if ("custom".equals(type) || "customValues".equals(type)) {
@@ -245,13 +211,10 @@ public class SharedResourcesApiController extends BaseController {
             } else if ("quoted".equals(type) && u.getQuota() != null) {
                 params.put(PARAM_QUOTA, String.valueOf(u.getQuota()));
             }
-            // No-op if nothing applicable was specified — still counts as applied.
             project.updateFeature(feature.getId(), FEATURE_TYPE, params);
             applied.add(u.getName());
         }
 
-        // Single persist call for all changes — retried on failure to handle transient
-        // lock contention (e.g. a Versioned Settings sync releasing the file shortly after).
         int attempts = settings.getPersistMaxAttempts();
         long delayMs  = settings.getPersistRetryDelayMs();
         Exception lastFailure = null;
@@ -264,11 +227,13 @@ public class SharedResourcesApiController extends BaseController {
                 if (i < attempts) {
                     try { Thread.sleep(delayMs); } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        throw new PersistException(e.getMessage());
+                        rollbackUpdates(project, originalParamsByFeatureId);
+                        throw new PersistException("Persist retry interrupted: " + e.getMessage());
                     }
                 }
             }
         }
+        rollbackUpdates(project, originalParamsByFeatureId);
         throw new PersistException(lastFailure.getMessage());
     }
 
@@ -279,7 +244,6 @@ public class SharedResourcesApiController extends BaseController {
             return;
         }
 
-        // Parse current values (TC stores them newline-separated).
         String raw = params.getOrDefault(PARAM_VALUES, "");
         LinkedHashSet<String> values = new LinkedHashSet<>(
                 Arrays.asList(raw.isEmpty() ? new String[0] : raw.split("\n")));
@@ -344,14 +308,41 @@ public class SharedResourcesApiController extends BaseController {
         objectMapper.writeValue(response.getOutputStream(), value);
     }
 
-    /** Overridable for testing — simulates lock contention without real threads. */
+    /** Overridable in tests. */
     protected boolean tryAcquireWriteLock() throws InterruptedException {
         return writeLock.tryLock(settings.getLockTimeoutSeconds(), TimeUnit.SECONDS);
     }
 
-    /** Overridable for testing — avoids a static dependency on SessionUser. */
+    /** Overridable in tests. */
     protected User getAuthenticatedUser(HttpServletRequest request) {
         return jetbrains.buildServer.web.util.SessionUser.getUser(request);
+    }
+
+    private void validateUpdateFieldsForType(BatchUpdateRequest.ResourceUpdate update, String type)
+            throws BadRequestException {
+        boolean hasValueChanges = update.getSetValues() != null
+                || update.getAddValues() != null
+                || update.getRemoveValues() != null;
+
+        if (("custom".equals(type) || "customValues".equals(type)) && update.getQuota() != null) {
+            throw new BadRequestException("Resource '" + update.getName() + "' is type '" + type +
+                    "' and does not support 'quota'");
+        }
+
+        if ("quoted".equals(type) && hasValueChanges) {
+            throw new BadRequestException("Resource '" + update.getName() + "' is type 'quoted' and does not support value list updates");
+        }
+    }
+
+    private void rollbackUpdates(SProject project, Map<String, Map<String, String>> originalParamsByFeatureId)
+            throws PersistException {
+        try {
+            for (Map.Entry<String, Map<String, String>> entry : originalParamsByFeatureId.entrySet()) {
+                project.updateFeature(entry.getKey(), FEATURE_TYPE, new HashMap<>(entry.getValue()));
+            }
+        } catch (Exception rollbackFailure) {
+            throw new PersistException("Persist failed and rollback did not complete cleanly: " + rollbackFailure.getMessage());
+        }
     }
 
     private Map<String, String> error(String message) {
