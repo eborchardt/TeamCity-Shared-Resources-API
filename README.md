@@ -1,12 +1,12 @@
 # Shared Resources API — TeamCity Plugin
 
-A TeamCity server plugin that provides an atomic REST API for managing shared resource pools. Designed to solve data-loss and "failed to persist" errors caused by concurrent writes when multiple scripts call the standard REST API in rapid succession.
+A TeamCity server plugin that adds a REST API for reading and updating shared resource pools. It was built to avoid the data-loss and "failed to persist" problems we were seeing when several scripts updated shared resources at the same time.
 
 ## Problem
 
 When Versioned Settings are enabled, TeamCity periodically syncs project configuration from the VCS — applying changes committed to `project-config.xml` (or its Kotlin DSL equivalent) back to the server. If a REST API call writes to a project's shared resources at the same moment TeamCity is applying a Versioned Settings sync, both operations attempt to write the same `project-config.xml` simultaneously. The result is either a `TeamCity failed to persist settings on disk` error or silently lost changes: whichever write lands second overwrites the first without merging it.
 
-This is most visible in pipelines that dynamically register or deregister resources (e.g. adding a freshly provisioned GPU node to a pool), where the REST call races against the background sync triggered by an unrelated commit to the settings repository.
+This showed up most often in pipelines that register or deregister resources on the fly, such as adding a newly provisioned GPU node to a pool, while a background settings sync was happening at the same time.
 
 ## Solution
 

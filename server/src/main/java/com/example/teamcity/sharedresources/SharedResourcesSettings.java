@@ -60,7 +60,7 @@ public class SharedResourcesSettings {
                                     int retryAfterLockSeconds,
                                     int retryAfterPersistSeconds,
                                     int persistMaxAttempts,
-                                    int persistRetryDelayMs) {
+                                    int persistRetryDelayMs) throws SettingsPersistenceException {
         props.setProperty(KEY_LOCK_TIMEOUT,     String.valueOf(lockTimeoutSeconds));
         props.setProperty(KEY_RETRY_LOCK,       String.valueOf(retryAfterLockSeconds));
         props.setProperty(KEY_RETRY_PERSIST,    String.valueOf(retryAfterPersistSeconds));
@@ -89,15 +89,24 @@ public class SharedResourcesSettings {
         }
     }
 
-    private void save() {
+    private void save() throws SettingsPersistenceException {
         try {
             File dir = settingsFile.getParentFile();
-            if (!dir.exists()) dir.mkdirs();
+            if (!dir.exists() && !dir.mkdirs()) {
+                throw new IOException("Could not create settings directory: " + dir.getAbsolutePath());
+            }
             try (OutputStream out = new FileOutputStream(settingsFile)) {
                 props.store(out, "Shared Resources API settings");
             }
         } catch (IOException e) {
             LOG.error("Could not save shared-resources-api settings: " + e.getMessage());
+            throw new SettingsPersistenceException("Could not save shared-resources-api settings", e);
+        }
+    }
+
+    static class SettingsPersistenceException extends Exception {
+        SettingsPersistenceException(String message, Throwable cause) {
+            super(message, cause);
         }
     }
 }

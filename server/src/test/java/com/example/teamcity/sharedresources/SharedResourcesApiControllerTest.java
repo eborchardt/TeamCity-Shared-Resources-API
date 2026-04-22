@@ -275,6 +275,39 @@ class SharedResourcesApiControllerTest {
     }
 
     @Test
+    void put_duplicateResourceUpdates_returns400() throws Exception {
+        putRequest("{\"resources\":["
+                + "{\"name\":\"GPU-Pool\",\"addValues\":[\"gpu-04\"]},"
+                + "{\"name\":\"GPU-Pool\",\"removeValues\":[\"gpu-01\"]}"
+                + "]}");
+
+        assertEquals(400, response.getStatus());
+        assertErrorContains("Duplicate resource update");
+        verify(project, never()).updateFeature(anyString(), anyString(), any());
+        verify(project, never()).persist();
+    }
+
+    @Test
+    void put_quotaForCustomResource_returns400() throws Exception {
+        putRequest("{\"resources\":[{\"name\":\"GPU-Pool\",\"quota\":10}]}");
+
+        assertEquals(400, response.getStatus());
+        assertErrorContains("does not support 'quota'");
+        verify(project, never()).updateFeature(anyString(), anyString(), any());
+        verify(project, never()).persist();
+    }
+
+    @Test
+    void put_valuesForQuotedResource_returns400() throws Exception {
+        putRequest("{\"resources\":[{\"name\":\"License-Pool\",\"addValues\":[\"lic-06\"]}]}");
+
+        assertEquals(400, response.getStatus());
+        assertErrorContains("does not support value list updates");
+        verify(project, never()).updateFeature(anyString(), anyString(), any());
+        verify(project, never()).persist();
+    }
+
+    @Test
     void put_missingName_returns400() throws Exception {
         putRequest("{\"resources\":[{\"addValues\":[\"x\"]}]}");
 
@@ -300,6 +333,9 @@ class SharedResourcesApiControllerTest {
         assertEquals(500, response.getStatus());
         assertNotNull(response.getHeader("Retry-After"));
         assertErrorContains("persist");
+        ArgumentCaptor<Map<String, String>> params = ArgumentCaptor.forClass(Map.class);
+        verify(project, times(2)).updateFeature(eq("PROJECT_EXT_1"), eq(FEATURE_TYPE), params.capture());
+        assertEquals("gpu-01\ngpu-02\ngpu-03", params.getAllValues().get(1).get(PARAM_VALUES));
     }
 
     @Test
